@@ -1,0 +1,15 @@
+LoginServer LS
+Client C
+GameServer GS
+
+LS->C   LoginServerGreeting
+C->LS   LoginRequest
+LS->C   LoginReply
+C->LS   ChooseServerRequest
+LS->GS  AnnounceUser
+GS->LS  GameServerReady
+LS->C   GameServerToken
+GS->C   GameServerGreeting
+C->GS   GameServerLoginRequest
+GS->C   GameServerLoginReply
+C->GS   ChooseCharacter
