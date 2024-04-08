@@ -1,12 +1,21 @@
 package net.nothingtv.game.network.server;
 
+import net.nothingtv.game.network.Tools;
 import net.nothingtv.game.network.message.Message;
 import net.nothingtv.game.network.message.Messages;
+import net.nothingtv.game.storage.client.Client;
+import net.nothingtv.game.storage.common.StorageConfig;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -22,6 +31,8 @@ public class LoginServer {
     private final ConcurrentHashMap<String, Long> expectedUsers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, GameServerConnection> commConnections = new ConcurrentHashMap<>();
     private final Random rnd = new Random();
+    private ServerSocketChannel serverSocketChannel;
+    private final DBClient dbClient;
 
     public LoginServer() {
         try {
@@ -31,29 +42,41 @@ public class LoginServer {
             LOG.addHandler(handler);
         } catch (Exception e) {}
         loadConfig();
+        dbClient = new DBClient();
     }
 
     public void start() {
 
         new Thread(() -> {
-            try {
-                Thread.sleep(200);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+            Tools.nap(200);
             startGameServerCommunication();
         }).start();
 
         active = true;
         try (ServerSocketChannel socket = ServerSocketChannel.open()) {
+            serverSocketChannel = socket;
             socket.bind(new InetSocketAddress(config.loginServer, config.loginPort));
             while (active) {
                 new Thread(new LoginSession(this, socket.accept())).start();
             }
+        } catch (ClosedChannelException e) {
+            LOG.log(Level.INFO, "LS socket closed - exiting");
         } catch (IOException ex) {
             LOG.log(Level.SEVERE, "Cannot create server socket on " + config.loginPort, ex);
         }
+        dbClient.close();
         LOG.info("Login server stopped.");
+    }
+
+    public void shutdown() {
+        active = false;
+        if (serverSocketChannel != null) {
+            try {
+                serverSocketChannel.close();
+            } catch (IOException e) {
+                LOG.log(Level.WARNING, "Cannot close server socket channel", e);
+            }
+        }
     }
 
     private void startGameServerCommunication() {
@@ -80,7 +103,7 @@ public class LoginServer {
     }
 
     public boolean authenticate(String user, String password) {
-        return true;
+        return dbClient.checkUserPassword(user, password);
     }
 
     public String getGameServers() {
@@ -88,11 +111,23 @@ public class LoginServer {
     }
 
     public int getCommToken() {
-        return 1;
+        try {
+            String content = Files.readString(Paths.get("comm-token"));
+            return Integer.parseInt(content.strip());
+        } catch (IOException e) {
+            LOG.log(Level.SEVERE, "There is no comm token defined", e);
+        }
+        return rnd.nextInt();
     }
 
     public boolean checkGSToken(int token) {
-        return true;
+        try {
+            String content = Files.readString(Paths.get("gs-token"));
+            return Integer.parseInt(content.strip()) == token;
+        } catch (IOException e) {
+            LOG.log(Level.SEVERE, "There is no game server token defined", e);
+        }
+        return false;
     }
 
     public void addExpectedUser(String user) {

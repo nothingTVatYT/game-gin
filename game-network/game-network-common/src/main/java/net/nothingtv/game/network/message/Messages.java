@@ -18,7 +18,8 @@ public class Messages {
     public static final int MinSize = 4;
 
     public static void init() {
-        MessageRegister.register();
+        if (messageTypes.isEmpty())
+            MessageRegister.register();
     }
 
     public static void registerMessage(int type, Class<? extends Message> messageClass) {

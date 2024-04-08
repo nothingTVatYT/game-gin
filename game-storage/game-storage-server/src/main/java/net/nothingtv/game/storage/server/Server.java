@@ -106,6 +106,17 @@ public class Server {
                         outbound.put(valueBuffer, 0, r);
                     }
                 }
+                case Storage.UID -> {
+                    try {
+                        byte[] id = getNewId(db);
+                        outbound.putShort((short)id.length);
+                        outbound.put(id);
+                    } catch (RocksDBException re) {
+                        LOG.log(Level.WARNING, "in uid", re);
+                        outbound.putShort((short)ERROR_VAL.length);
+                        outbound.put(ERROR_VAL);
+                    }
+                }
                 case Storage.INSERT -> {
                     try {
                         byte[] id = getNewId(db);

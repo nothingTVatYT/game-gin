@@ -55,6 +55,34 @@ public class Client {
         }
     }
 
+    public int uid() throws IOException {
+        synchronized (buffer) {
+            buffer.clear();
+            buffer.put(Storage.UID);
+            buffer.putShort((short)0);
+            buffer.flip();
+            channel.write(buffer);
+            buffer.clear();
+            int r = channel.read(buffer);
+            if (r < 6) {
+                LOG.log(Level.WARNING, "short read");
+                return -1;
+            }
+            buffer.flip();
+            short idLength = buffer.getShort();
+            int id;
+            if (idLength == 4)
+                id = buffer.getInt();
+            else {
+                id = 0;
+                byte[] tmp = new byte[idLength];
+                buffer.get(tmp);
+                LOG.log(Level.WARNING, new String(tmp, 0, idLength, StandardCharsets.UTF_8) + " UID failed");
+            }
+            return id;
+        }
+    }
+
     public int insert(String columnFamily, byte[] value) throws IOException {
         synchronized(buffer) {
             buffer.clear();

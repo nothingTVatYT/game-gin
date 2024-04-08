@@ -13,4 +13,12 @@
     <artifactId>game-network-common</artifactId>
     <packaging>jar</packaging>
 
+    <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.jr</groupId>
+            <artifactId>jackson-jr-objects</artifactId>
+            <version>2.17.0</version>
+        </dependency>
+    </dependencies>
+
 </project>
