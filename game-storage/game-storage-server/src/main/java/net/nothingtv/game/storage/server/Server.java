@@ -12,6 +12,7 @@ import org.rocksdb.RocksDBException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -28,6 +29,7 @@ public class Server {
 
     private final StorageConfig config;
     private volatile boolean active;
+    private ServerSocketChannel serverChannel;
     static final HashMap<String, ColumnFamilyHandle> columns = new HashMap<>();
 
     static class StorageRequest {
@@ -187,6 +189,11 @@ public class Server {
 
     public void shutdown() {
         active = false;
+        try {
+            serverChannel.close();
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Could not close server channel", e);
+        }
     }
 
     public void start() {
@@ -201,6 +208,8 @@ public class Server {
     public void run() {
         active = true;
         LOG.log(Level.INFO, "Storage Server starting");
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+
         // a static method that loads the RocksDB C++ library.
         RocksDB.loadLibrary();
 
@@ -230,14 +239,17 @@ public class Server {
                     columns.put(new String(cfDescriptors.get(i).getName(), StandardCharsets.UTF_8), columnFamilyHandleList.get(i));
                 }
                 try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
-
+                    serverChannel = serverSocket;
                     serverSocket.bind(new InetSocketAddress(config.serverPort));
                     while (active) {
                         new Thread(new ServerSession(serverSocket.accept(), db)).start();
                     }
+                } catch (ClosedChannelException e) {
+                    LOG.log(Level.INFO, "Channel closed - exiting");
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 } finally {
+                    db.flushWal(true);
 
                     // NOTE frees the column family handles before freeing the db
                     for (final ColumnFamilyHandle columnFamilyHandle :
