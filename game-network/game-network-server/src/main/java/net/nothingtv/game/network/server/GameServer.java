@@ -21,7 +21,7 @@ public class GameServer {
     private GameServerConfig config;
     private boolean active;
     private ServerSocketChannel serverSocketChannel;
-    private DBClient dbClient;
+    private final DBClient dbClient;
 
     public GameServer() {
         try {
