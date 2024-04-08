@@ -32,6 +32,7 @@ public class Server {
     private final StorageConfig config;
     private volatile boolean active;
     private ServerSocketChannel serverChannel;
+    private static Server serverInstance;
     static final HashMap<String, ColumnFamilyHandle> columns = new HashMap<>();
 
     static class StorageRequest {
@@ -56,10 +57,11 @@ public class Server {
 
         @Override
         public void run() {
-            LOG.log(Level.INFO, "Storage Server Session");
+            LOG.log(Level.INFO, "Storage Server Session started");
             try {
                 while (channel.isConnected()) {
                     int r = channel.read(buffer);
+                    if (r < 0) break;
                     if (r > 0) {
                         readRequest(buffer);
                     }
@@ -67,99 +69,110 @@ public class Server {
             } catch (IOException e) {
                 LOG.log(Level.WARNING, "Storage Server Session", e);
             }
+            LOG.log(Level.INFO, "Storage Server Session stopped");
         }
 
         void readRequest(ByteBuffer buffer) throws IOException {
             int pos = buffer.position();
             buffer.flip();
-            request.command = buffer.get();
-            request.requestLength = buffer.getShort();
-            if (pos < request.requestLength + 3) {
-                // package is incomplete
-                buffer.position(pos);
-                return;
-            }
-            int fl = buffer.get();
-            ColumnFamilyHandle handle;
-            if (fl > 0) {
-                buffer.get(tmp, 0, fl);
-                String columnFamily = new String(tmp, 0, fl, StandardCharsets.UTF_8);
-                handle = columns.get(columnFamily);
-            } else {
-                handle = db.getDefaultColumnFamily();
-            }
-            // expect a key unless it's an insert
-            int kl = 0;
-            if (request.command != Storage.INSERT) {
-                kl = buffer.get();
-                buffer.get(tmp, 0, kl);
-            }
             outbound.clear();
-            switch (request.command) {
-                case Storage.GET -> {
-                    int r = -1;
-                    try {
-                        r = db.get(handle, tmp, 0, kl, valueBuffer, 0, valueBuffer.length);
-                    } catch (RocksDBException re) {
-                        LOG.log(Level.WARNING, "in get(" + new String(tmp,0,kl, StandardCharsets.UTF_8) + ")", re);
+            while (buffer.hasRemaining()) {
+                request.command = buffer.get();
+                request.requestLength = buffer.getShort();
+                if (pos < request.requestLength + 3) {
+                    // package is incomplete
+                    buffer.position(pos);
+                    buffer.limit(buffer.capacity());
+                    LOG.log(Level.INFO, "reading incomplete.");
+                    if (outbound.position() > 0) {
+                        outbound.flip();
+                        channel.write(outbound);
                     }
-                    if (r == RocksDB.NOT_FOUND) {
-                        outbound.putShort((short)0);
-                    } else {
-                        outbound.putShort((short)r);
-                        outbound.put(valueBuffer, 0, r);
-                    }
+                    return;
                 }
-                case Storage.UID -> {
-                    try {
-                        byte[] id = getNewId(db);
-                        outbound.putShort((short)id.length);
-                        outbound.put(id);
-                    } catch (RocksDBException re) {
-                        LOG.log(Level.WARNING, "in uid", re);
-                        outbound.putShort((short)ERROR_VAL.length);
-                        outbound.put(ERROR_VAL);
-                    }
+                int fl = buffer.get();
+                ColumnFamilyHandle handle;
+                if (fl > 0) {
+                    buffer.get(tmp, 0, fl);
+                    String columnFamily = new String(tmp, 0, fl, StandardCharsets.UTF_8);
+                    handle = columns.get(columnFamily);
+                } else {
+                    handle = db.getDefaultColumnFamily();
                 }
-                case Storage.INSERT -> {
-                    try {
-                        byte[] id = getNewId(db);
-                        int vl = buffer.getShort();
-                        buffer.get(valueBuffer, 0, vl);
-                        db.put(handle, id, 0, 4, valueBuffer, 0, vl);
-                        outbound.putShort((short)id.length);
-                        outbound.put(id);
-                    } catch (RocksDBException re) {
-                        LOG.log(Level.WARNING, "in insert(" + new String(tmp,0,kl, StandardCharsets.UTF_8) + ")", re);
-                        outbound.putShort((short)ERROR_VAL.length);
-                        outbound.put(ERROR_VAL);
-                    }
+                // expect a key unless it's an insert
+                int kl = 0;
+                if (request.command != Storage.INSERT) {
+                    kl = buffer.get();
+                    buffer.get(tmp, 0, kl);
                 }
-                case Storage.UPDATE -> {
-                    try {
-                        int vl = buffer.getShort();
-                        buffer.get(valueBuffer, 0, vl);
-                        db.put(handle, tmp, 0, kl, valueBuffer, 0, vl);
-                        outbound.putShort((short)0);
-                    } catch (RocksDBException re) {
-                        LOG.log(Level.WARNING, "in update(" + new String(tmp,0,kl, StandardCharsets.UTF_8) + ")", re);
-                        outbound.putShort((short)ERROR_VAL.length);
-                        outbound.put(ERROR_VAL);
+                switch (request.command) {
+                    case Storage.GET -> {
+                        int r = -1;
+                        try {
+                            r = db.get(handle, tmp, 0, kl, valueBuffer, 0, valueBuffer.length);
+                        } catch (RocksDBException re) {
+                            LOG.log(Level.WARNING, "in get(" + new String(tmp, 0, kl, StandardCharsets.UTF_8) + ")", re);
+                        }
+                        if (r == RocksDB.NOT_FOUND) {
+                            outbound.putShort((short) 0);
+                        } else {
+                            outbound.putShort((short) r);
+                            outbound.put(valueBuffer, 0, r);
+                        }
                     }
-                }
-                case Storage.DELETE -> {
-                    try {
-                        db.delete(handle, tmp, 0, kl);
-                        outbound.putShort((short)0);
-                    } catch (RocksDBException re) {
-                        LOG.log(Level.WARNING, "in delete(" + new String(tmp,0,kl, StandardCharsets.UTF_8) + ")", re);
-                        outbound.putShort((short)ERROR_VAL.length);
-                        outbound.put(ERROR_VAL);
+                    case Storage.UID -> {
+                        try {
+                            byte[] id = getNewId(db);
+                            outbound.putShort((short) id.length);
+                            outbound.put(id);
+                        } catch (RocksDBException re) {
+                            LOG.log(Level.WARNING, "in uid", re);
+                            outbound.putShort((short) ERROR_VAL.length);
+                            outbound.put(ERROR_VAL);
+                        }
                     }
+                    case Storage.INSERT -> {
+                        try {
+                            byte[] id = getNewId(db);
+                            int vl = buffer.getShort();
+                            buffer.get(valueBuffer, 0, vl);
+                            db.put(handle, id, 0, 4, valueBuffer, 0, vl);
+                            outbound.putShort((short) id.length);
+                            outbound.put(id);
+                        } catch (RocksDBException re) {
+                            LOG.log(Level.WARNING, "in insert(" + new String(tmp, 0, kl, StandardCharsets.UTF_8) + ")", re);
+                            outbound.putShort((short) ERROR_VAL.length);
+                            outbound.put(ERROR_VAL);
+                        }
+                    }
+                    case Storage.UPDATE -> {
+                        try {
+                            int vl = buffer.getShort();
+                            buffer.get(valueBuffer, 0, vl);
+                            db.put(handle, tmp, 0, kl, valueBuffer, 0, vl);
+                            outbound.putShort((short) 0);
+                        } catch (RocksDBException re) {
+                            LOG.log(Level.WARNING, "in update(" + new String(tmp, 0, kl, StandardCharsets.UTF_8) + ")", re);
+                            outbound.putShort((short) ERROR_VAL.length);
+                            outbound.put(ERROR_VAL);
+                        }
+                    }
+                    case Storage.DELETE -> {
+                        try {
+                            db.delete(handle, tmp, 0, kl);
+                            outbound.putShort((short) 0);
+                        } catch (RocksDBException re) {
+                            LOG.log(Level.WARNING, "in delete(" + new String(tmp, 0, kl, StandardCharsets.UTF_8) + ")", re);
+                            outbound.putShort((short) ERROR_VAL.length);
+                            outbound.put(ERROR_VAL);
+                        }
+                    }
+                    case (byte)0xee -> new Thread(() -> serverInstance.scheduleShutdown()).start();
                 }
             }
             outbound.flip();
             channel.write(outbound);
+            buffer.clear();
         }
 
         public byte[] getNewId(RocksDB db) throws RocksDBException {
@@ -192,12 +205,23 @@ public class Server {
                 Files.createDirectory(dir);
             Handler handler = new FileHandler("log/storageserver.log");
             handler.setFormatter(new SimpleFormatter());
-            Logger.getGlobal().setLevel(Level.FINE);
+            Logger.getGlobal().setLevel(Level.INFO);
             LOG.addHandler(handler);
         } catch (Exception e) {
             System.err.println("Failed to setup logging." + e);
         }
         this.config = config;
+        serverInstance = this;
+    }
+
+    private void scheduleShutdown() {
+        new Thread(() -> {
+            try {
+                Thread.sleep(2500);
+            } catch (Exception e) {
+            }
+            shutdown();
+        }).start();
     }
 
     public void shutdown() {
@@ -206,6 +230,21 @@ public class Server {
             serverChannel.close();
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Could not close server channel", e);
+        }
+    }
+
+    public static void shutdownInstance(StorageConfig config) {
+        try (SocketChannel channel = SocketChannel.open()) {
+            channel.connect(new InetSocketAddress(config.serverPort));
+            ByteBuffer buffer = ByteBuffer.allocateDirect(8);
+            buffer.put((byte)0xee);
+            buffer.putShort((short)2);
+            buffer.put((byte)0);
+            buffer.put((byte)0);
+            buffer.flip();
+            channel.write(buffer);
+        } catch (IOException e) {
+            System.err.println("Cannot connect to server instance" + e);
         }
     }
 
@@ -221,7 +260,7 @@ public class Server {
     public void run() {
         active = true;
         LOG.log(Level.INFO, "Storage Server starting");
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+        //Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
 
         // a static method that loads the RocksDB C++ library.
         RocksDB.loadLibrary();
@@ -253,6 +292,7 @@ public class Server {
                 }
                 try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
                     serverChannel = serverSocket;
+                    serverSocket.configureBlocking(true);
                     serverSocket.bind(new InetSocketAddress(config.serverPort));
                     while (active) {
                         new Thread(new ServerSession(serverSocket.accept(), db)).start();
@@ -278,7 +318,11 @@ public class Server {
     }
 
     public static void main(String[] args) {
-        StorageConfig config = new StorageConfig();
-        new Server(config).run();
+        if (args.length > 0 && "shutdown".equals(args[0])) {
+            Server.shutdownInstance(new StorageConfig());
+        } else {
+            StorageConfig config = new StorageConfig();
+            new Server(config).run();
+        }
     }
 }

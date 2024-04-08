@@ -42,7 +42,7 @@ public class LoginServer {
                 Files.createDirectory(dir);
             Handler handler = new FileHandler("log/loginserver.log");
             handler.setFormatter(new SimpleFormatter());
-            Logger.getGlobal().setLevel(Level.FINE);
+            Logger.getGlobal().setLevel(Level.INFO);
             LOG.addHandler(handler);
         } catch (Exception e) {}
         loadConfig();
