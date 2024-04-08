@@ -8,6 +8,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.*;
@@ -25,7 +26,10 @@ public class GameServer {
 
     public GameServer() {
         try {
-            Handler handler = new FileHandler("gameserver.log");
+            Path dir = Paths.get("log");
+            if (!Files.isDirectory(dir))
+                Files.createDirectory(dir);
+            Handler handler = new FileHandler("log/gameserver.log");
             handler.setFormatter(new SimpleFormatter());
             LOG.addHandler(handler);
         } catch (Exception e) {}

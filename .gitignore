@@ -4,6 +4,7 @@ target/
 !**/src/test/**/target/
 dependency-reduced-pom.xml
 /storage/data/
+/local-tests/
 
 ### IntelliJ IDEA ###
 .idea/
@@ -39,3 +40,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+/*server.config
+/*.log

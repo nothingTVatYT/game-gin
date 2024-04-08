@@ -16,11 +16,13 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.logging.*;
 
 public class Server {
     private static final Logger LOG = Logger.getLogger(Server.class.getName());
@@ -184,6 +186,17 @@ public class Server {
 
     }
     public Server(StorageConfig config) {
+        try {
+            Path dir = Paths.get("log");
+            if (!Files.isDirectory(dir))
+                Files.createDirectory(dir);
+            Handler handler = new FileHandler("log/storageserver.log");
+            handler.setFormatter(new SimpleFormatter());
+            Logger.getGlobal().setLevel(Level.FINE);
+            LOG.addHandler(handler);
+        } catch (Exception e) {
+            System.err.println("Failed to setup logging." + e);
+        }
         this.config = config;
     }
 

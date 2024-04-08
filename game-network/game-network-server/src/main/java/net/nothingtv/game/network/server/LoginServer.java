@@ -15,6 +15,7 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,7 +37,10 @@ public class LoginServer {
 
     public LoginServer() {
         try {
-            Handler handler = new FileHandler("loginserver.log");
+            Path dir = Paths.get("log");
+            if (!Files.isDirectory(dir))
+                Files.createDirectory(dir);
+            Handler handler = new FileHandler("log/loginserver.log");
             handler.setFormatter(new SimpleFormatter());
             Logger.getGlobal().setLevel(Level.FINE);
             LOG.addHandler(handler);
