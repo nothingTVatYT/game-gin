@@ -9,6 +9,7 @@ import net.nothingtv.game.network.message.MessageRegister;
 import net.nothingtv.game.network.message.Messages;
 import net.nothingtv.game.network.message.impl.*;
 
+import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,13 +39,15 @@ public class LoginSession implements Runnable, MessageHandler {
     @Override
     public void run() {
         LOG.info("LS: Login session started on " + (socket.isBlocking() ? "" : "non-") + "blocking channel.");
+        Thread.currentThread().setName("LS user session");
         new Thread(new NetworkReader(socket, this)).start();
         new Thread(writer = new NetworkWriter(socket)).start();
         LoginServerGreeting greetings = Messages.obtain(LoginServerGreeting.class);
         greetings.version = LoginServer.Version;
         writer.send(greetings);
 
-        while (socket.isOpen()) {
+        long started = System.currentTimeMillis();
+        while (socket.isConnected()) {
             Tools.nap(100);
             if (loggedIn && waitForGS) {
                 if (loginServer.isExpectedUser(login)) {
@@ -59,7 +62,17 @@ public class LoginSession implements Runnable, MessageHandler {
                     }
                 }
             }
+            if (System.currentTimeMillis() - started > 30000) {
+                LOG.log(Level.INFO, "LS: Login session timed out");
+                break;
+            }
         }
+        try {
+            socket.close();
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "LS could not close user session socket");
+        }
+        writer.stop();
         LOG.info("LS: Login session stopped");
     }
 

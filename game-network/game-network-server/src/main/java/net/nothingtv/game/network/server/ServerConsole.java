@@ -19,8 +19,8 @@ public class ServerConsole {
     private String startupScript;
     private final String shutdownScript;
     private Interpreter interpreter;
-    protected LoginServer loginServer;
-    protected GameServer gameServer;
+    public LoginServer loginServer;
+    public GameServer gameServer;
     private final Random rnd = new Random();
 
     public ServerConsole(String[] args) {
@@ -56,11 +56,11 @@ public class ServerConsole {
     }
 
     public void setCommTokens() {
-        int token = rnd.nextInt();
-        String tokenStr = String.valueOf(token);
+        int token = rnd.nextInt(1, Integer.MAX_VALUE >> 1);
+        String tokenStr = String.format("%d", token);
         try {
-            Files.writeString(Paths.get("comm-token"), tokenStr, StandardOpenOption.CREATE);
-            Files.writeString(Paths.get("gs-token"), tokenStr, StandardOpenOption.CREATE);
+            Files.writeString(Paths.get("comm-token"), tokenStr, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.writeString(Paths.get("gs-token"), tokenStr, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
             System.err.println("Cannot create tokens: " + e);
         }
@@ -102,6 +102,18 @@ public class ServerConsole {
             interpreter.run();
         } catch (IOException|EvalError e) {
             System.err.println("I/O Error on console: " + e);
+        }
+    }
+
+    public void threads() {
+        Thread[] liveThreads = new Thread[Thread.activeCount()];
+        Thread.enumerate(liveThreads);
+        for (Thread thr : liveThreads) {
+            StackTraceElement[] st = thr.getStackTrace();
+            String function = "";
+            if (st.length > 0)
+                function = st[0].getClassName() + "." + st[0].getMethodName() + ":" + st[0].getLineNumber();
+            interpreter.println(String.format("#%d '%s' %s (%s)", thr.threadId(), thr.getName(), thr.getState(), function));
         }
     }
 

@@ -110,6 +110,14 @@ public class LoginServer {
         return dbClient.checkUserPassword(user, password);
     }
 
+    public boolean addUser(String user, String password) {
+        return dbClient.addUser(user, password);
+    }
+
+    public boolean updateUser(String user, String password) {
+        return dbClient.updateUser(user, password);
+    }
+
     public String getGameServers() {
         return config.gameServersCoded;
     }

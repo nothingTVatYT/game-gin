@@ -88,4 +88,11 @@ public class CommSession implements Runnable, MessageHandler {
             throw new RuntimeException(e);
         }
     }
+
+    public static void main(String[] args) {
+        System.out.printf("max int=%d%n", Integer.MAX_VALUE);
+        String s = "12491868067";
+        int i = Integer.parseInt(s);
+        System.out.printf("i=%d%n", i);
+    }
 }

@@ -40,12 +40,40 @@ public class DBClient {
         return defaultValue;
     }
 
+    public void set(String columnFamily, String key, String value) throws IOException {
+        client.update(columnFamily, key.getBytes(StandardCharsets.UTF_8), value.getBytes(StandardCharsets.UTF_8));
+    }
+
     public boolean checkUserPassword(String user, String password) {
         try {
             byte[] pw = get(Table_User, user);
             return pw != null && password.equals(new String(pw, StandardCharsets.UTF_8));
         } catch (IOException e) {
             LOG.log(Level.WARNING, "Cannot access user table", e);
+        }
+        return false;
+    }
+
+    public boolean addUser(String user, String password) {
+        try {
+            byte[] pw = get(Table_User, user);
+            if (pw != null) return false;
+            set(Table_User, user, password);
+            return true;
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "Cannot add user", e);
+        }
+        return false;
+    }
+
+    public boolean updateUser(String user, String password) {
+        try {
+            byte[] pw = get(Table_User, user);
+            if (pw == null) return false;
+            set(Table_User, user, password);
+            return true;
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "Cannot update user", e);
         }
         return false;
     }

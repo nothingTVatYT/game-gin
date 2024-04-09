@@ -25,8 +25,9 @@ public class NetworkReader implements Runnable {
 
     @Override
     public void run() {
+        Thread.currentThread().setName("network reader");
         LOG.info("Channel reader started");
-        while (channel.isOpen()) {
+        while (channel.isConnected()) {
             try {
                 int bytesRead = channel.read(readBuffer);
                 if (bytesRead > 0) {

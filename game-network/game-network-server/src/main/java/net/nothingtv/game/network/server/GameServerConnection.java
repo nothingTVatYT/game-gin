@@ -38,6 +38,7 @@ public class GameServerConnection implements Runnable, MessageHandler {
 
     @Override
     public void run() {
+        Thread.currentThread().setName("LS -> GS connection");
         LOG.info("LS: contacting the game server at " + host + ":" + port);
         try {
             socket = SocketChannel.open();

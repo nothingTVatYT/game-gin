@@ -48,6 +48,7 @@ public class GameClient implements Runnable, MessageHandler {
             handler.setFormatter(new SimpleFormatter());
             Logger.getGlobal().setLevel(Level.FINE);
             Logger.getGlobal().addHandler(handler);
+            Messages.init();
         } catch (Exception e) {}
         this.config = config;
     }
@@ -72,6 +73,7 @@ public class GameClient implements Runnable, MessageHandler {
 
         try {
             loginServerSocket.close();
+            loginServerOutChannel.stop();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -87,20 +89,21 @@ public class GameClient implements Runnable, MessageHandler {
                 socket.finishConnect();
             new Thread(new NetworkReader(socket, this)).start();
             new Thread(gameServerOutChannel = new NetworkWriter(socket)).start();
-            while (socket.isOpen()) {
+            while (socket.isConnected()) {
                 Tools.nap(1000);
             }
         } catch (IOException ex) {
             LOG.log(Level.SEVERE, "Cannot create client socket for " + config.loginPort, ex);
         }
+        gameServerOutChannel.stop();
         LOG.info("Game client stopped.");
     }
 
-    private String getLogin() {
+    protected String getLogin() {
         return "user01";
     }
 
-    private String getPassword() {
+    protected String getPassword() {
         return "secret";
     }
 
@@ -155,7 +158,7 @@ public class GameClient implements Runnable, MessageHandler {
                 GameServerLoginReply reply = (GameServerLoginReply) message;
                 if (reply.accepted && reply.characters.length > 0) {
                     ChooseCharacter cc = Messages.obtain(ChooseCharacter.class);
-                    cc.character = reply.characters[0];
+                    cc.character = chooseCharacter(reply.characters);
                     gameServerOutChannel.send(cc);
                     loggedIn = true;
                 } else {
@@ -177,6 +180,10 @@ public class GameClient implements Runnable, MessageHandler {
 
     public void loginFailed(String message) {
         System.out.printf("Cannot login: %s%n", message);
+    }
+
+    protected String chooseCharacter(String[] characters) {
+        return characters[0];
     }
 
     public String chooseServer(String allServers) {

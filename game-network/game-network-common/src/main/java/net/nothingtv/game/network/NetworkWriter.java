@@ -31,42 +31,47 @@ public class NetworkWriter implements Runnable {
         }
     }
 
+    public void stop() {
+        synchronized (messages) {
+            messages.notify();
+        }
+    }
+
     @Override
     public void run() {
+        Thread.currentThread().setName("network writer");
         LOG.info("Channel writer started");
-        Message message = null;
-        boolean tryAgain = false;
-        while (channel.isOpen()) {
+        Message message;
+        while (channel.isConnected()) {
             try {
                 if (messages.isEmpty() && writeBuffer.position() == 0) {
                     // nothing to do - wait for new messages
                     synchronized (messages) {
                         try {
-                            messages.wait();
+                            messages.wait(10000);
                         } catch (InterruptedException e) {
                             break;
                         }
                     }
                 }
                 while (!messages.isEmpty()) {
-                    if (!tryAgain)
-                        message = messages.poll();
+                    int pos = writeBuffer.position();
+                    message = messages.peek();
                     if (message != null) {
-                        int pos = writeBuffer.position();
                         if (!message.write(writeBuffer)) {
                             writeBuffer.position(pos);
-                            if (writeBuffer.position() > 0) {
-                                tryAgain = true;
+                            if (pos > 0) {
+                                // try again next time the writebuffer is empty
                                 break;
                             }
                             LOG.log(Level.WARNING, "Cannot write message " + message);
-                            tryAgain = false;
+                            messages.poll();
                         } else {
+                            messages.poll();
                             LOG.info("Message " + message.getClass() + " sent.");
                             Messages.releaseMessage(message);
-                            tryAgain = false;
                         }
-                        if (writeBuffer.remaining() < 500) {
+                        if (writeBuffer.remaining() < 250) {
                             break;
                         }
                     }

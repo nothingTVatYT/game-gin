@@ -38,6 +38,7 @@ public class GameSession implements Runnable, MessageHandler {
     @Override
     public void run() {
         LOG.info("Game session started");
+        Thread.currentThread().setName("GS user session");
         new Thread(new NetworkReader(socket, this)).start();
         new Thread(writer = new NetworkWriter(socket)).start();
         GameServerGreeting greetings = Messages.obtain(GameServerGreeting.class);

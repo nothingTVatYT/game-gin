@@ -79,7 +79,7 @@ public class Server {
             while (buffer.hasRemaining()) {
                 request.command = buffer.get();
                 request.requestLength = buffer.getShort();
-                if (pos < request.requestLength + 3) {
+                if (buffer.remaining() < request.requestLength) {
                     // package is incomplete
                     buffer.position(pos);
                     buffer.limit(buffer.capacity());
@@ -114,7 +114,7 @@ public class Server {
                             LOG.log(Level.WARNING, "in get(" + new String(tmp, 0, kl, StandardCharsets.UTF_8) + ")", re);
                         }
                         if (r == RocksDB.NOT_FOUND) {
-                            outbound.putShort((short) 0);
+                            outbound.putShort((short) -1);
                         } else {
                             outbound.putShort((short) r);
                             outbound.put(valueBuffer, 0, r);
