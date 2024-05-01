@@ -79,7 +79,10 @@ public class Server {
             while (buffer.hasRemaining()) {
                 request.command = buffer.get();
                 request.requestLength = buffer.getShort();
-                if (buffer.remaining() < request.requestLength) {
+                if (request.requestLength <= 0) {
+                    LOG.log(Level.WARNING, "invalid request length " + request.requestLength + " for cmd" + (int)request.command);
+                }
+                if (buffer.remaining() < request.requestLength || request.requestLength <= 0) {
                     // package is incomplete
                     buffer.position(pos);
                     buffer.limit(buffer.capacity());
@@ -96,12 +99,15 @@ public class Server {
                     buffer.get(tmp, 0, fl);
                     String columnFamily = new String(tmp, 0, fl, StandardCharsets.UTF_8);
                     handle = columns.get(columnFamily);
+                    if (handle == null) {
+                        LOG.log(Level.WARNING, "Unknown column family name " + columnFamily);
+                    }
                 } else {
                     handle = db.getDefaultColumnFamily();
                 }
-                // expect a key unless it's an insert
+                // expect a key unless it's an insert or uid
                 int kl = 0;
-                if (request.command != Storage.INSERT) {
+                if (request.command != Storage.INSERT && request.command != Storage.UID) {
                     kl = buffer.get();
                     buffer.get(tmp, 0, kl);
                 }
@@ -146,13 +152,15 @@ public class Server {
                         }
                     }
                     case Storage.UPDATE -> {
+                        int vl = 0;
                         try {
-                            int vl = buffer.getShort();
+                            vl = buffer.getShort();
                             buffer.get(valueBuffer, 0, vl);
                             db.put(handle, tmp, 0, kl, valueBuffer, 0, vl);
                             outbound.putShort((short) 0);
-                        } catch (RocksDBException re) {
-                            LOG.log(Level.WARNING, "in update(" + new String(tmp, 0, kl, StandardCharsets.UTF_8) + ")", re);
+                        } catch (Exception re) {
+                            LOG.log(Level.WARNING, "in update(" + Storage.toHex(tmp, 0, kl) + ", "
+                                    + new String(valueBuffer, 0, vl, StandardCharsets.UTF_8)+ ")", re);
                             outbound.putShort((short) ERROR_VAL.length);
                             outbound.put(ERROR_VAL);
                         }
@@ -290,6 +298,11 @@ public class Server {
                 for (int i = 0; i < cfDescriptors.size(); i++) {
                     columns.put(new String(cfDescriptors.get(i).getName(), StandardCharsets.UTF_8), columnFamilyHandleList.get(i));
                 }
+                // test write
+                byte[] key1 = "startTime".getBytes(StandardCharsets.UTF_8);
+                byte[] value1 = String.format("%d", System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8);
+                db.put(columnFamilyHandleList.getFirst(), key1, 0, key1.length, value1, 0, value1.length);
+
                 try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
                     serverChannel = serverSocket;
                     serverSocket.configureBlocking(true);

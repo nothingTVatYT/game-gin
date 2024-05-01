@@ -23,7 +23,7 @@ public class StorageConfig {
         if (configFile.exists()) {
             try (InputStream is = new FileInputStream(configFile)) {
                 properties.load(is);
-                int numberColumnFamilies = Integer.parseInt(properties.getProperty("numberColumnFamilies", "0"));
+                int numberColumnFamilies = Integer.parseInt(properties.getProperty("numberColumnFamilies", "20"));
                 for (int i = 0; i < numberColumnFamilies; i++) {
                     String cf = properties.getProperty("columnFamily" + i, "");
                     if (!cf.isBlank())
@@ -34,6 +34,7 @@ public class StorageConfig {
                 e.printStackTrace();
             }
         } else {
+            System.err.println("No storage config found in " + new File("storage.config").getAbsolutePath());
             serverPort = 4788;
         }
     }

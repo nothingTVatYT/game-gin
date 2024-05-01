@@ -59,7 +59,9 @@ public class Client {
         synchronized (buffer) {
             buffer.clear();
             buffer.put(Storage.UID);
-            buffer.putShort((short)0);
+            buffer.putShort((short)1);
+            // always use default column family
+            buffer.put((byte)0);
             buffer.flip();
             channel.write(buffer);
             buffer.clear();
@@ -119,6 +121,10 @@ public class Client {
     }
 
     public void update(String columnFamily, byte[] key, byte[] value) throws IOException {
+        if (key.length == 0) {
+            LOG.log(Level.WARNING, "key length is 0 in update command");
+            throw new RuntimeException("Cannot update without a key");
+        }
         synchronized(buffer) {
             buffer.clear();
             short requestLength;
@@ -134,7 +140,10 @@ public class Client {
             requestLength = (short)(buffer.position() - 3);
             buffer.putShort(1, requestLength);
             buffer.flip();
-            channel.write(buffer);
+            int l = buffer.limit();
+            int w = channel.write(buffer);
+            if (w < l)
+                LOG.log(Level.WARNING, "short write in update channel write - update code with a check");
             buffer.clear();
             channel.read(buffer);
             buffer.flip();
@@ -142,7 +151,8 @@ public class Client {
             if (respLength != 0) {
                 byte[] tmp = new byte[respLength];
                 buffer.get(tmp);
-                LOG.log(Level.WARNING, new String(tmp, StandardCharsets.UTF_8) + " Update failed");
+                LOG.log(Level.WARNING, new String(tmp, StandardCharsets.UTF_8) + " Update in " + columnFamily
+                        + " failed, value is " + new String(value, StandardCharsets.UTF_8));
             }
         }
     }

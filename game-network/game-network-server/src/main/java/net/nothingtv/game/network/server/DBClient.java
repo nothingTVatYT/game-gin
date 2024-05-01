@@ -35,7 +35,7 @@ public class DBClient {
     public int getInt(String columnFamily, String key, int defaultValue) throws IOException {
         byte[] result = client.get(columnFamily, key.getBytes(StandardCharsets.UTF_8));
         if (result != null) {
-            return Integer.parseInt(new String(result).strip());
+            return Tools.fromBytes(result);
         }
         return defaultValue;
     }
